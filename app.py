@@ -10,6 +10,12 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Inicialização robusta do estado da aplicação
+if "gerar_recomendacao" not in st.session_state:
+    st.session_state["gerar_recomendacao"] = False
+if "dados_entrada" not in st.session_state:
+    st.session_state["dados_entrada"] = {}
+
 # CSS customizado para design profissional
 st.markdown(
     """
@@ -198,6 +204,7 @@ with aba_entrada:
             step=0.1,
             format="%.1f g/kg",
             help="Valor de nitrogênio (N) conforme informado no laudo de análise de solo, em g/kg.",
+            key="n_g_kg",
         )
 
         p_mg_dm3 = st.slider(
@@ -208,6 +215,7 @@ with aba_entrada:
             step=0.5,
             format="%.1f mg/dm³",
             help="Valor de fósforo (P) conforme informado no laudo de análise de solo, em mg/dm³.",
+            key="p_mg_dm3",
         )
 
         k_mg_dm3 = st.slider(
@@ -218,6 +226,7 @@ with aba_entrada:
             step=1.0,
             format="%.1f mg/dm³",
             help="Valor de potássio (K) conforme informado no laudo de análise de solo, em mg/dm³.",
+            key="k_mg_dm3",
         )
 
     with col2:
@@ -227,6 +236,7 @@ with aba_entrada:
             "Cultura",
             options=["Soja", "Milho", "Trigo", "Feijão", "Café"],
             help="Selecione a cultura para a qual deseja obter a recomendação.",
+            key="cultura",
         )
 
         expectativa_rendimento = st.slider(
@@ -237,81 +247,104 @@ with aba_entrada:
             step=0.5,
             format="%.1f t/ha",
             help="Rendimento esperado da cultura, em toneladas por hectare (t/ha).",
+            key="expectativa_rendimento",
         )
 
     st.markdown("---")
 
+    # Botão que ativa a geração da recomendação e persiste os dados de entrada
     if st.button("Gerar Recomendação", type="primary"):
         st.session_state["gerar_recomendacao"] = True
-    else:
-        st.session_state.setdefault("gerar_recomendacao", False)
+        st.session_state["dados_entrada"] = {
+            "n_g_kg": n_g_kg,
+            "p_mg_dm3": p_mg_dm3,
+            "k_mg_dm3": k_mg_dm3,
+            "cultura": cultura,
+            "expectativa_rendimento": expectativa_rendimento,
+        }
 
 with aba_recomendacao:
     st.header("Recomendação de Nutrientes")
 
     if st.session_state.get("gerar_recomendacao", False):
-        # Conversão interna dos valores do laudo para o modelo
-        n_modelo, p_modelo, k_modelo = converter_entrada_para_modelo(
-            n_g_kg, p_mg_dm3, k_mg_dm3
-        )
+        dados = st.session_state.get("dados_entrada", {})
 
-        recomendacao = modelo_recomendacao(
-            n_modelo, p_modelo, k_modelo, cultura, expectativa_rendimento
-        )
+        if not dados:
+            st.warning(
+                "Os dados de entrada não foram encontrados. "
+                "Volte à aba **📊 Entrada de Dados** e clique em **Gerar Recomendação**.",
+                icon="⚠️",
+            )
+        else:
+            # Recupera as variáveis salvas no session_state para garantir acesso na aba atual
+            n_g_kg = dados.get("n_g_kg", 0.0)
+            p_mg_dm3 = dados.get("p_mg_dm3", 0.0)
+            k_mg_dm3 = dados.get("k_mg_dm3", 0.0)
+            cultura = dados.get("cultura", "Soja")
+            expectativa_rendimento = dados.get("expectativa_rendimento", 0.0)
 
-        st.markdown(
-            f"""
-            <div class="result-card">
-                <h3>🧪 Recomendação Final para {cultura}</h3>
-                <p class="metric-label">Unidade de medida:</p>
-                <p class="metric-value">kg/ha <span class="unit-badge">quilogramas por hectare</span></p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            st.metric(
-                label="Nitrogênio (N)",
-                value=f"{recomendacao['N']} kg/ha",
+            # Conversão interna dos valores do laudo para o modelo
+            n_modelo, p_modelo, k_modelo = converter_entrada_para_modelo(
+                n_g_kg, p_mg_dm3, k_mg_dm3
             )
 
-        with col2:
-            st.metric(
-                label="Fósforo (P₂O₅)",
-                value=f"{recomendacao['P2O5']} kg/ha",
+            recomendacao = modelo_recomendacao(
+                n_modelo, p_modelo, k_modelo, cultura, expectativa_rendimento
             )
 
-        with col3:
-            st.metric(
-                label="Potássio (K₂O)",
-                value=f"{recomendacao['K2O']} kg/ha",
+            st.markdown(
+                f"""
+                <div class="result-card">
+                    <h3>🧪 Recomendação Final para {cultura}</h3>
+                    <p class="metric-label">Unidade de medida:</p>
+                    <p class="metric-value">kg/ha <span class="unit-badge">quilogramas por hectare</span></p>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
-        st.markdown("---")
+            col1, col2, col3 = st.columns(3)
 
-        st.subheader("Resumo dos valores de entrada")
-        dados_resumo = pd.DataFrame(
-            {
-                "Nutriente": ["Nitrogênio (N)", "Fósforo (P)", "Potássio (K)"],
-                "Valor no laudo": [f"{n_g_kg} g/kg", f"{p_mg_dm3} mg/dm³", f"{k_mg_dm3} mg/dm³"],
-                "Valor após conversão": [f"{n_modelo} g/kg", f"{p_modelo} kg/ha", f"{k_modelo} kg/ha"],
-            }
-        )
-        st.dataframe(dados_resumo, use_container_width=True, hide_index=True)
+            with col1:
+                st.metric(
+                    label="Nitrogênio (N)",
+                    value=f"{recomendacao['N']} kg/ha",
+                )
 
-        st.markdown(
-            """
-            <div class="disclaimer">
-                <strong>Atenção:</strong> a recomendação apresentada tem caráter orientativo. 
-                Consulte sempre um agrônomo para validação técnica considerando as características 
-                específicas da área, da cultura e do manejo adotado.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+            with col2:
+                st.metric(
+                    label="Fósforo (P₂O₅)",
+                    value=f"{recomendacao['P2O5']} kg/ha",
+                )
+
+            with col3:
+                st.metric(
+                    label="Potássio (K₂O)",
+                    value=f"{recomendacao['K2O']} kg/ha",
+                )
+
+            st.markdown("---")
+
+            st.subheader("Resumo dos valores de entrada")
+            dados_resumo = pd.DataFrame(
+                {
+                    "Nutriente": ["Nitrogênio (N)", "Fósforo (P)", "Potássio (K)"],
+                    "Valor no laudo": [f"{n_g_kg} g/kg", f"{p_mg_dm3} mg/dm³", f"{k_mg_dm3} mg/dm³"],
+                    "Valor após conversão": [f"{n_modelo} g/kg", f"{p_modelo} kg/ha", f"{k_modelo} kg/ha"],
+                }
+            )
+            st.dataframe(dados_resumo, use_container_width=True, hide_index=True)
+
+            st.markdown(
+                """
+                <div class="disclaimer">
+                    <strong>Atenção:</strong> a recomendação apresentada tem caráter orientativo. 
+                    Consulte sempre um agrônomo para validação técnica considerando as características 
+                    específicas da área, da cultura e do manejo adotado.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
     else:
         st.info(
             "Vá até a aba **📊 Entrada de Dados** e clique em **Gerar Recomendação** para visualizar os resultados em kg/ha."
