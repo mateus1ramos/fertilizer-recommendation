@@ -1,5 +1,4 @@
 import streamlit as st
-import numpy as np
 import pandas as pd
 
 # Configuração da página
@@ -155,16 +154,6 @@ def converter_entrada_para_modelo(n_g_kg, p_mg_dm3, k_mg_dm3):
     """
     Converte os valores de entrada do laudo de análise de solo
     para as unidades esperadas pelo modelo de recomendação.
-
-    Parâmetros:
-    - n_g_kg: Nitrogênio em g/kg (conforme laudo)
-    - p_mg_dm3: Fósforo em mg/dm³ (conforme laudo)
-    - k_mg_dm3: Potássio em mg/dm³ (conforme laudo)
-
-    Retorna:
-    - n_modelo: Nitrogênio mantido em g/kg
-    - p_modelo: Fósforo convertido multiplicando por 2 (kg/ha na camada 0-20cm)
-    - k_modelo: Potássio convertido multiplicando por 2 (kg/ha na camada 0-20cm)
     """
     n_modelo = n_g_kg
     p_modelo = p_mg_dm3 * 2
@@ -175,9 +164,7 @@ def converter_entrada_para_modelo(n_g_kg, p_mg_dm3, k_mg_dm3):
 def modelo_recomendacao(n, p, k, cultura, expectativa_rendimento, tipo_solo):
     """
     Modelo simplificado de recomendação de adubação.
-    Em aplicações reais, substituir por modelo treinado ou equações agronômicas.
     """
-    # Fatores de resposta por cultura (exemplo didático)
     fatores = {
         "Soybean": {"n": 0.08, "p": 0.12, "k": 0.18},
         "Corn": {"n": 0.15, "p": 0.10, "k": 0.14},
@@ -188,7 +175,6 @@ def modelo_recomendacao(n, p, k, cultura, expectativa_rendimento, tipo_solo):
 
     f = fatores.get(cultura, {"n": 0.10, "p": 0.10, "k": 0.10})
 
-    # Ajuste leve pelo tipo de solo para manter a seleção relevante na recomendação
     ajuste_solo = {
         "Clay": 1.05,
         "Silty": 1.00,
@@ -197,7 +183,6 @@ def modelo_recomendacao(n, p, k, cultura, expectativa_rendimento, tipo_solo):
     }
     solo_fator = ajuste_solo.get(tipo_solo, 1.00)
 
-    # Cálculo de necessidade considerando teor do solo e expectativa de rendimento
     necessidade_n = max(0, (expectativa_rendimento * f["n"] * 10) - (n * 10))
     necessidade_p = max(0, (expectativa_rendimento * f["p"] * 10) - p)
     necessidade_k = max(0, (expectativa_rendimento * f["k"] * 10) - k)
@@ -294,165 +279,115 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Abas da aplicação
-aba_entrada, aba_recomendacao, aba_sobre = st.tabs(
-    ["📊 Entrada de Dados", "✅ Recomendação", "ℹ️ Sobre"]
-)
+# Container reservado para garantir a ordem de renderização do resultado
+resultado_container = st.container()
 
-# ---------------------------------------------------------------------------
-# Aba: Entrada de Dados
-# ---------------------------------------------------------------------------
-with aba_entrada:
-    st.header("Dados do Laudo de Análise de Solo")
+st.header("Dados do Laudo de Análise de Solo")
 
-    with st.form(key="form_recomendacao", clear_on_submit=False):
-        col1, col2 = st.columns([2, 1])
+with st.form(key="form_recomendacao", clear_on_submit=False):
+    col1, col2 = st.columns([2, 1])
 
-        with col1:
-            st.subheader("Macronutrientes do Solo")
+    with col1:
+        st.subheader("Macronutrientes do Solo")
 
-            n_g_kg = st.slider(
-                "Nitrogênio (N)",
-                min_value=0.0,
-                max_value=5.0,
-                value=1.2,
-                step=0.1,
-                format="%.1f g/kg",
-                help="Valor de nitrogênio (N) conforme informado no laudo de análise de solo, em g/kg.",
-            )
+        n_g_kg = st.slider(
+            "Nitrogênio (N)",
+            min_value=0.0,
+            max_value=5.0,
+            value=1.2,
+            step=0.1,
+            format="%.1f g/kg",
+            help="Valor de nitrogênio (N) conforme informado no laudo de análise de solo, em g/kg.",
+        )
 
-            p_mg_dm3 = st.slider(
-                "Fósforo (P)",
-                min_value=0.0,
-                max_value=60.0,
-                value=10.0,
-                step=0.5,
-                format="%.1f mg/dm³",
-                help="Valor de fósforo (P) conforme informado no laudo de análise de solo, em mg/dm³.",
-            )
+        p_mg_dm3 = st.slider(
+            "Fósforo (P)",
+            min_value=0.0,
+            max_value=60.0,
+            value=10.0,
+            step=0.5,
+            format="%.1f mg/dm³",
+            help="Valor de fósforo (P) conforme informado no laudo de análise de solo, em mg/dm³.",
+        )
 
-            k_mg_dm3 = st.slider(
-                "Potássio (K)",
-                min_value=0.0,
-                max_value=400.0,
-                value=80.0,
-                step=1.0,
-                format="%.1f mg/dm³",
-                help="Valor de potássio (K) conforme informado no laudo de análise de solo, em mg/dm³.",
-            )
+        k_mg_dm3 = st.slider(
+            "Potássio (K)",
+            min_value=0.0,
+            max_value=400.0,
+            value=80.0,
+            step=1.0,
+            format="%.1f mg/dm³",
+            help="Valor de potássio (K) conforme informado no laudo de análise de solo, em mg/dm³.",
+        )
 
-        with col2:
-            st.subheader("Cultura, Solo e Rendimento")
+    with col2:
+        st.subheader("Cultura, Solo e Rendimento")
 
-            # Interface em português, mas mantemos a chave em inglês via dicionário
-            tipo_solo_pt = st.selectbox(
-                "Tipo de Solo",
-                options=list(SOIL_EN_TO_PT.values()),
-                index=3,  # "Franco"
-                help="Selecione o tipo de solo da área avaliada.",
-            )
+        tipo_solo_pt = st.selectbox(
+            "Tipo de Solo",
+            options=list(SOIL_EN_TO_PT.values()),
+            index=3,  # "Franco"
+            help="Selecione o tipo de solo da área avaliada.",
+        )
 
-            cultura_pt = st.selectbox(
-                "Cultura",
-                options=list(CROP_EN_TO_PT.values()),
-                help="Selecione a cultura para a qual deseja obter a recomendação.",
-            )
+        cultura_pt = st.selectbox(
+            "Cultura",
+            options=list(CROP_EN_TO_PT.values()),
+            help="Selecione a cultura para a qual deseja obter a recomendação.",
+        )
 
-            expectativa_rendimento = st.slider(
-                "Expectativa de rendimento",
-                min_value=1.0,
-                max_value=12.0,
-                value=4.0,
-                step=0.5,
-                format="%.1f t/ha",
-                help="Rendimento esperado da cultura, em toneladas por hectare (t/ha).",
-            )
+        expectativa_rendimento = st.slider(
+            "Expectativa de rendimento",
+            min_value=1.0,
+            max_value=12.0,
+            value=4.0,
+            step=0.5,
+            format="%.1f t/ha",
+            help="Rendimento esperado da cultura, em toneladas por hectare (t/ha).",
+        )
 
-        st.markdown("---")
-        submitted = st.form_submit_button("Gerar Recomendação", type="primary")
+    st.markdown("---")
+    submitted = st.form_submit_button("Gerar Recomendação", type="primary")
 
-        if submitted:
-            # Conversão PT -> EN para uso interno no modelo
-            tipo_solo_en = SOIL_PT_TO_EN[tipo_solo_pt]
-            cultura_en = CROP_PT_TO_EN[cultura_pt]
+    if submitted:
+        # Conversão PT -> EN para uso interno no modelo
+        tipo_solo_en = SOIL_PT_TO_EN[tipo_solo_pt]
+        cultura_en = CROP_PT_TO_EN[cultura_pt]
 
-            # Conversão interna dos valores do laudo para o modelo (mg/dm³ -> kg/ha)
-            n_modelo, p_modelo, k_modelo = converter_entrada_para_modelo(
-                n_g_kg, p_mg_dm3, k_mg_dm3
-            )
+        # Conversão interna dos valores do laudo para o modelo
+        n_modelo, p_modelo, k_modelo = converter_entrada_para_modelo(
+            n_g_kg, p_mg_dm3, k_mg_dm3
+        )
 
-            # Chamada do modelo com valores convertidos
-            recomendacao = modelo_recomendacao(
-                n_modelo, p_modelo, k_modelo, cultura_en, expectativa_rendimento, tipo_solo_en
-            )
+        # Chamada do modelo com valores convertidos
+        recomendacao = modelo_recomendacao(
+            n_modelo, p_modelo, k_modelo, cultura_en, expectativa_rendimento, tipo_solo_en
+        )
 
-            # Persiste tudo no session_state para evitar perda de estado
-            st.session_state["gerar_recomendacao"] = True
-            st.session_state["dados_entrada"] = {
-                "n_g_kg": n_g_kg,
-                "p_mg_dm3": p_mg_dm3,
-                "k_mg_dm3": k_mg_dm3,
-                "tipo_solo_pt": tipo_solo_pt,
-                "tipo_solo_en": tipo_solo_en,
-                "cultura_pt": cultura_pt,
-                "cultura_en": cultura_en,
-                "expectativa_rendimento": expectativa_rendimento,
-                "n_modelo": n_modelo,
-                "p_modelo": p_modelo,
-                "k_modelo": k_modelo,
-            }
-            st.session_state["recomendacao"] = recomendacao
+        # Persiste os dados no session_state para manter o resultado
+        st.session_state["gerar_recomendacao"] = True
+        st.session_state["dados_entrada"] = {
+            "n_g_kg": n_g_kg,
+            "p_mg_dm3": p_mg_dm3,
+            "k_mg_dm3": k_mg_dm3,
+            "tipo_solo_pt": tipo_solo_pt,
+            "tipo_solo_en": tipo_solo_en,
+            "cultura_pt": cultura_pt,
+            "cultura_en": cultura_en,
+            "expectativa_rendimento": expectativa_rendimento,
+            "n_modelo": n_modelo,
+            "p_modelo": p_modelo,
+            "k_modelo": k_modelo,
+        }
+        st.session_state["recomendacao"] = recomendacao
 
-    # Exibe o resultado logo abaixo do formulário, na mesma aba
-    if st.session_state.get("gerar_recomendacao", False):
-        st.markdown("---")
+        # Exibe a recomendação imediatamente após o clique, dentro do container reservado
+        with resultado_container:
+            exibir_recomendacao(st.session_state["dados_entrada"], recomendacao)
+
+# Mantém a recomendação visível em reexecuções subsequentes (quando não houve novo submit)
+if not submitted and st.session_state.get("gerar_recomendacao"):
+    with resultado_container:
         exibir_recomendacao(
             st.session_state["dados_entrada"], st.session_state["recomendacao"]
         )
-
-# ---------------------------------------------------------------------------
-# Aba: Recomendação
-# ---------------------------------------------------------------------------
-with aba_recomendacao:
-    st.header("Recomendação de Nutrientes")
-
-    if st.session_state.get("gerar_recomendacao", False):
-        exibir_recomendacao(
-            st.session_state["dados_entrada"], st.session_state["recomendacao"]
-        )
-    else:
-        st.info(
-            "Preencha o formulário na aba **📊 Entrada de Dados** e clique em **Gerar Recomendação** "
-            "para visualizar os resultados em kg/ha."
-        )
-
-# ---------------------------------------------------------------------------
-# Aba: Sobre
-# ---------------------------------------------------------------------------
-with aba_sobre:
-    st.header("Sobre a Aplicação")
-
-    st.markdown(
-        """
-        Esta aplicação foi desenvolvida para auxiliar na recomendação de adubação baseada em
-        laudos de análise de solo.
-
-        ### Unidades de medida utilizadas
-        - **Nitrogênio (N):** g/kg (gramas por quilograma) — unidade comum em laudos de solo.
-        - **Fósforo (P):** mg/dm³ (miligramas por decímetro cúbico) — unidade comum em laudos de solo.
-        - **Potássio (K):** mg/dm³ (miligramas por decímetro cúbico) — unidade comum em laudos de solo.
-
-        ### Conversão interna
-        Os valores de fósforo e potássio informados em mg/dm³ são multiplicados por 2 antes de
-        serem processados pelo modelo. Essa é a conversão padrão para kg/ha na camada de solo
-        de 0–20 cm.
-
-        ### Tipo de solo
-        A seleção do tipo de solo é mantida durante toda a sessão e influencia levemente a
-        recomendação final, conforme a retenção de nutrientes típica de cada classe textural.
-
-        ### Recomendação final
-        Todos os valores de adubação sugeridos são exibidos em **kg/ha** (quilogramas por hectare),
-        unidade padrão para aplicação de fertilizantes em lavouras.
-        """
-    )
